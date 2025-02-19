@@ -3,10 +3,13 @@ const cors = require("cors");
 const app = express();
 require("dotenv").config();
 
+app.use(express.json());
+app.use(cors());
+
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 5000;
 
-const uri = `mongodb+srv://${process.env.DB_USER}:<${process.env.DB_PASS}@cluster0.6ypdnj9.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6ypdnj9.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // API version
 const client = new MongoClient(uri, {
@@ -23,273 +26,252 @@ async function run() {
     const productCollections = client
       .db("sweetPencilBD")
       .collection("products");
-    const customerCollections = client
-      .db("sweetPencilBD")
-      .collection("customers");
+    const bannerCollections = client.db("sweetPencilBD").collection("banners");
+    const orderCollections = client.db("sweetPencilBD").collection("orders");
 
     // get users from db
     app.get("/users", async (req, res) => {
       const result = await userCollections.find().toArray();
       res.send(result);
     });
-    // Add products route here:
+
+    // add Product API
     app.post("/add-product", async (req, res) => {
-      try {
-        const productData = {
-          ...req.body,
-          creationDate: new Date(), // Add current date as creation date
-        };
-        // Insert the product data into the "products" collection
-        const result = await productCollections.insertOne(productData);
-
-        res.status(201).json({
-          message: "Product added successfully",
-          productId: result.insertedId,
-        });
-      } catch (error) {
-        console.error("Error adding product:", error);
-        res.status(500).json({ message: "Failed to add product", error });
-      }
+      const product = req.body;
+      const result = await productCollections.insertOne(product);
+      res.send(result);
     });
 
-    // Fetch products for table data show.
-    app.get("/products", async (req, res) => {
-      try {
-        // Fetch products and sort them by creationDate in descending order
-        const products = await productCollections
-          .find({})
-          .sort({ creationDate: -1 })
-          .toArray();
-        res.status(200).json(products);
-      } catch (error) {
-        res.status(500).json({ error: "Failed to fetch products" });
-      }
+    //Get card Data form Database
+    app.get("/show-product", async (req, res) => {
+      const result = await productCollections.find().toArray();
+      res.send(result);
     });
 
-    // product table data delete api's here.
-    app.delete("/products/:id", async (req, res) => {
-      const productId = req.params.id;
-      // console.log(productId)
+    // dashboard stock show
+    app.get("/stock", async (req, res) => {
+      const { category, page, limit } = req.query;
+      const query = category ? { category } : {};
+      const pageNumber = parseInt(page) || 1;
+      const limitNumber = parseInt(limit) || 3;
+      const skip = (pageNumber - 1) * limitNumber;
 
+      const totalCount = await productCollections.countDocuments(query);
+      const products = await productCollections
+        .find(query)
+        .skip(skip)
+        .limit(limitNumber)
+        .toArray();
+
+      res.send({ products, totalCount });
+    });
+
+    //for details page
+    app.get("/show-product/:id", async (req, res) => {
+      const id = req.params.id;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid Product ID" });
+      }
       try {
-        const result = await productCollections.deleteOne({
-          _id: new ObjectId(productId),
-        });
-
-        if (result.deletedCount === 1) {
-          res.json({ message: "Product deleted successfully" });
-        } else {
-          res.status(404).json({ message: "Product not found" });
+        const query = { _id: new ObjectId(id) };
+        const result = await productCollections.findOne(query);
+        if (!result) {
+          return res.status(404).send({ error: "Product not found" });
         }
+        res.send(result);
       } catch (error) {
-        res.status(500).json({ message: "Error deleting product", error });
-      }
-    });
-    // get products from update route by ID api's here:
-    app.get("/products/:id", async (req, res) => {
-      try {
-        const { id } = req.params;
-        const product = await productCollections.findOne({
-          _id: new ObjectId(id),
-        });
-        if (!product) {
-          return res.status(404).json({ message: "Product not found" });
-        }
-        res.json(product);
-      } catch (error) {
-        res.status(500).json({ message: "Error fetching product", error });
-      }
-    });
-    // update products by ID api's here:
-    app.put("/products/:id", async (req, res) => {
-      try {
-        const { id } = req.params;
-        const updatedData = req.body;
-
-        // Remove undefined fields (like optional image URL)
-        Object.keys(updatedData).forEach((key) => {
-          if (updatedData[key] === undefined) delete updatedData[key];
-        });
-
-        const result = await productCollections.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: updatedData }
-        );
-
-        if (result.modifiedCount === 0) {
-          return res
-            .status(404)
-            .json({ message: "Product not found or no changes made" });
-        }
-
-        res.json({ message: "Product updated successfully" });
-      } catch (error) {
-        res.status(500).json({ message: "Error updating product", error });
-      }
-    });
-    // All products show api here.(report)
-    app.get("/products-report", async (req, res) => {
-      const { category } = req.query;
-
-      try {
-        let query = {};
-
-        if (category) {
-          query.productCategory = category;
-        }
-
-        const products = await productCollections.find(query).toArray();
-        res.json(products);
-      } catch (error) {
-        console.error("Error fetching products:", error);
-        res.status(500).send("Server Error");
-      }
-    });
-
-    // Add Customer route here:
-    app.post("/add-customer", async (req, res) => {
-      try {
-        const { customerName, mobile } = req.body;
-        const existingCustomer = await customerCollections.findOne({
-          customerName,
-          mobile,
-        });
-
-        if (existingCustomer) {
-          const updateResult = await customerCollections.updateOne(
-            { customerName, mobile },
-            { $set: { ...req.body, updateDate: new Date() } }
-          );
-          res.status(200).json({
-            message: "Customer data updated successfully",
-            updatedCustomer: updateResult,
-          });
-        } else {
-          const customerData = {
-            ...req.body,
-          };
-          const result = await customerCollections.insertOne(customerData);
-          res.status(201).json({
-            message: "Customer added successfully",
-            productId: result.insertedId,
-          });
-        }
-      } catch (error) {
-        console.error("Error adding/updating customer:", error);
         res
           .status(500)
-          .json({ message: "Failed to add or update customer", error });
+          .send({ message: "Failed to fetch product data", error });
       }
     });
-
-    // Fetch customers for table data show.
-    app.get("/customers", async (req, res) => {
-      try {
-        // Fetch customers and sort them by creationDate in descending order
-        const customers = await customerCollections
-          .find({})
-          .sort({ creationDate: -1 })
-          .toArray();
-        res.status(200).json(customers);
-      } catch (error) {
-        res.status(500).json({ error: "Failed to fetch customers" });
+    // single order get by ID
+    app.get("/singleProduct/:id", async (req, res) => {
+      const id = req.params.id;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid Product ID" });
       }
-    });
-    // Fetch product info for table data show.
-    app.get("/product-info", async (req, res) => {
       try {
-        // Fetch customers and sort them by creationDate in descending order
-        const products = await productCollections
-          .find({})
-          .sort({ creationDate: -1 })
-          .toArray();
-        res.status(200).json(products);
-      } catch (error) {
-        res.status(500).json({ error: "Failed to fetch products info" });
-      }
-    });
-
-    //  stock qty change api here
-    app.put("/product-info/:id", async (req, res) => {
-      const { id } = req.params;
-      const { newStock } = req.body;
-
-      try {
-        const result = await productCollections.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { productQty: newStock } }
-        );
-
-        if (result.modifiedCount > 0) {
-          res
-            .status(200)
-            .json({ message: "Product stock updated successfully" });
-        } else {
-          res
-            .status(404)
-            .json({ message: "Product not found or no changes made" });
+        const query = { _id: new ObjectId(id) };
+        const result = await productCollections.findOne(query);
+        if (!result) {
+          return res.status(404).send({ error: "Product not found" });
         }
+        res.send(result);
       } catch (error) {
-        console.error("Error updating product stock:", error);
-        res.status(500).json({ error: "Failed to update product stock" });
+        res
+          .status(500)
+          .send({ message: "Failed to fetch product data", error });
       }
     });
-
-    // product table data delete api's here.
-    app.delete("/customers/:id", async (req, res) => {
-      const customer = req.params.id;
-      // console.log(productId)
-
+    // Product delete API here:
+    app.delete("/delete/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
       try {
-        const result = await customerCollections.deleteOne({
-          _id: new ObjectId(customer),
-        });
-
+        const result = await productCollections.deleteOne(query);
         if (result.deletedCount === 1) {
-          res.json({ message: "customer deleted successfully" });
+          res.status(200).send({ message: "Product deleted successfully" });
         } else {
-          res.status(404).json({ message: "customer not found" });
+          res.status(404).send({ message: "Product not found" });
         }
       } catch (error) {
-        res.status(500).json({ message: "Error deleting customer", error });
+        res.status(500).send({ message: "Error deleting product", error });
       }
     });
 
-    // Fetch customers info for table data show. ::: zahid
-    app.get("/customers-info", async (req, res) => {
-      try {
-        const products = await salesCollections.find().toArray();
-        res.status(200).send(products);
-      } catch (error) {
-        res.status(500).json({ error: "Failed to fetch products info" });
-      }
-    });
+    // Update product data
+    app.put("/updateProduct/:id", async (req, res) => {
+      const id = req.params.id;
+      let updateData = req.body;
 
-    // customer details ::: zahid -
-    app.get("/customers-info/:id", async (req, res) => {
-      const { id } = req.params;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid Product ID" });
+      }
+
       try {
-        const products = await salesCollections.findOne({
-          _id: new ObjectId(id),
+        const query = { _id: new ObjectId(id) };
+
+        console.log("Received update request for ID:", id);
+        console.log("Update Data Before Filtering:", updateData);
+
+        // Ensure _id is removed from updateData
+        delete updateData._id;
+
+        console.log("Update Data After Filtering:", updateData);
+
+        const result = await productCollections.updateOne(query, {
+          $set: updateData,
         });
-        res.status(200).send(products);
+
+        if (!result.matchedCount) {
+          return res.status(404).send({ error: "Product not found" });
+        }
+
+        res.send({ message: "Product updated successfully" });
       } catch (error) {
-        res.status(500).json({ error: "Failed to fetch products info" });
+        console.error("Error updating product:", error.message, error.stack);
+        res.status(500).send({
+          message: "Failed to update product data",
+          error: error.message,
+        });
+      }
+    });
+    // place order:
+    app.post("/place-order", async (req, res) => {
+      console.log("Request received at /create-order");
+
+      const {
+        customerName,
+        phone,
+        address,
+        productName,
+        productPrice,
+        quantity,
+        courierFee,
+        totalCost,
+      } = req.body;
+
+      // Ensure that all required fields are provided
+      if (
+        !customerName ||
+        !phone ||
+        !address ||
+        !productName ||
+        !productPrice ||
+        !quantity ||
+        !courierFee ||
+        !totalCost
+      ) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      try {
+        const result = await orderCollections.insertOne({
+          customerName,
+          phone,
+          address,
+          productName,
+          productPrice,
+          quantity,
+          courierFee,
+          totalCost,
+          orderDate: new Date(),
+        });
+
+        res.json({
+          message: "Order placed successfully!",
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        console.error("Error saving order data to MongoDB", error);
+        res.status(500).json({ message: "Failed to place the order" });
       }
     });
 
-    // Admin home page api's here........
-    app.get("/api/dashboard-counts", async (req, res) => {
+    app.get("/orders", async (req, res) => {
+      const { status, page, limit } = req.query;
+      const query = status ? { status } : {};
+
+      const orders = await orderCollections
+        .find(query)
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .toArray();
+
+      const totalCount = await orderCollections.countDocuments(query);
+
+      res.send({ orders, totalCount });
+    });
+
+    // Banner section API's here:
+    // POST endpoint to save banner data
+    app.post("/create-banner", async (req, res) => {
+      console.log("Request received at /create-banner");
+
+      const { bannerImage } = req.body;
+      if (!bannerImage) {
+        return res.status(400).json({ message: "Image URL is required" });
+      }
+
       try {
-        const userCount = await userCollections.estimatedDocumentCount();
-        const productCount = await productCollections.estimatedDocumentCount();
-        res.send({
-          userCount,
-          productCount,
+        const result = await bannerCollections.insertOne({ bannerImage });
+        res.json({
+          message: "Banner data saved successfully!",
+          insertedId: result.insertedId,
         });
       } catch (error) {
-        console.error("Error fetching counts:", error);
-        res.status(500).json({ message: "Error fetching counts" });
+        console.error("Error saving data to MongoDB", error);
+        res.status(500).json({ message: "Failed to save banner data" });
+      }
+    });
+
+    // GET endpoint to fetch all banners
+    app.get("/get-banner", async (req, res) => {
+      try {
+        const banners = await bannerCollections.find().toArray();
+        res.json(banners);
+        console.log("banner", await bannerCollections.find().toArray());
+      } catch (error) {
+        console.error("Error fetching banners:", error);
+        res.status(500).json({ message: "Failed to fetch banners" });
+      }
+    });
+
+    //   Banner Deleted API's
+
+    app.delete("/banner-delete/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      try {
+        const result = await bannerCollections.deleteOne(query);
+        if (result.deletedCount === 1) {
+          res.status(200).send({ message: "Banner deleted successfully" });
+        } else {
+          res.status(404).send({ message: "Banner not found" });
+        }
+      } catch (error) {
+        res.status(500).send({ message: "Error deleting Banner", error });
       }
     });
   } finally {
