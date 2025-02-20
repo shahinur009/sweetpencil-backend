@@ -30,9 +30,15 @@ async function run() {
     const orderCollections = client.db("sweetPencilBD").collection("orders");
 
     // get users from db
-    app.get("/users", async (req, res) => {
-      const result = await userCollections.find().toArray();
-      res.send(result);
+    app.post("/login", async (req, res) => {
+      console.log(req.body);
+      const { email, password } = req.body;
+      const user = await userCollections.findOne({ email });
+
+      if (!user || user.password !== password) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      res.json({ message: "Login successful", user });
     });
 
     // add Product API
@@ -170,9 +176,9 @@ async function run() {
         quantity,
         courierFee,
         totalCost,
+        status,
       } = req.body;
 
-      // Ensure that all required fields are provided
       if (
         !customerName ||
         !phone ||
@@ -180,7 +186,6 @@ async function run() {
         !productName ||
         !productPrice ||
         !quantity ||
-        !courierFee ||
         !totalCost
       ) {
         return res.status(400).json({ message: "All fields are required" });
@@ -197,6 +202,7 @@ async function run() {
           courierFee,
           totalCost,
           orderDate: new Date(),
+          status: "pending",
         });
 
         res.json({
@@ -208,7 +214,7 @@ async function run() {
         res.status(500).json({ message: "Failed to place the order" });
       }
     });
-
+    // get dashboard orders table data
     app.get("/orders", async (req, res) => {
       const { status, page, limit } = req.query;
       const query = status ? { status } : {};
@@ -222,6 +228,31 @@ async function run() {
       const totalCount = await orderCollections.countDocuments(query);
 
       res.send({ orders, totalCount });
+    });
+
+    // Delete dashboard order list
+    app.delete("/orders/:id", async (req, res) => {
+      const { id } = req.params;
+
+      console.log("Received delete request for ID:", id); // Debugging
+
+      try {
+        const result = await orderCollections.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        console.log("Delete result:", result);
+        console.log("Deleting order with ID:", id);
+
+        if (result.deletedCount > 0) {
+          res.json({ success: true, message: "Order deleted successfully" });
+        } else {
+          res.status(404).json({ success: false, message: "Order not found" });
+        }
+      } catch (error) {
+        console.error("Error deleting order:", error);
+        res.status(500).json({ success: false, message: "Server error" });
+      }
     });
 
     // Banner section API's here:
