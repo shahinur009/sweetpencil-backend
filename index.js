@@ -7,7 +7,7 @@ app.use(express.json());
 app.use(cors());
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const port = process.env.PORT || 4000;
+const port = process.env.PORT || 5000;
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6ypdnj9.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -27,6 +27,9 @@ async function run() {
       .db("sweetPencilBD")
       .collection("products");
     const bannerCollections = client.db("sweetPencilBD").collection("banners");
+    const galleryCollections = client
+      .db("sweetPencilBD")
+      .collection("galleries");
     const orderCollections = client.db("sweetPencilBD").collection("orders");
 
     // get users from db
@@ -258,8 +261,6 @@ async function run() {
     // Banner section API's here:
     // POST endpoint to save banner data
     app.post("/create-banner", async (req, res) => {
-      console.log("Request received at /create-banner");
-
       const { bannerImage } = req.body;
       if (!bannerImage) {
         return res.status(400).json({ message: "Image URL is required" });
@@ -282,7 +283,6 @@ async function run() {
       try {
         const banners = await bannerCollections.find().toArray();
         res.json(banners);
-        console.log("banner", await bannerCollections.find().toArray());
       } catch (error) {
         console.error("Error fetching banners:", error);
         res.status(500).json({ message: "Failed to fetch banners" });
@@ -290,7 +290,6 @@ async function run() {
     });
 
     //   Banner Deleted API's
-
     app.delete("/banner-delete/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -305,9 +304,65 @@ async function run() {
         res.status(500).send({ message: "Error deleting Banner", error });
       }
     });
+
+    // create gallery here
+    app.post("/create-gallery", async (req, res) => {
+      console.log("Request received at /create-gallery");
+
+      const { bannerImage: galleryImage } = req.body;
+      if (!galleryImage) {
+        return res.status(400).json({ message: "Image URL is required" });
+      }
+
+      try {
+        const result = await galleryCollections.insertOne({
+          galleryImage,
+        });
+        res.json({
+          message: "gallery data saved successfully!",
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        console.error("Error saving data to MongoDB", error);
+        res.status(500).json({ message: "Failed to save gallery data" });
+      }
+    });
+
+    // GET all gallery
+    app.get("/gallery", async (req, res) => {
+      try {
+        const gallery = await galleryCollections.find().toArray();
+        res.json(gallery);
+        // console.log("gallery", gallery);
+      } catch (error) {
+        console.error("Error fetching gallery:", error);
+        res.status(500).json({ message: "Failed to fetch gallery" });
+      }
+    });
+
+    //   gallery Deleted API's
+    app.delete("/gallery-delete/:id", async (req, res) => {
+      const { id } = req.params;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid gallery ID" });
+      }
+      try {
+        const result = await galleryCollections.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount === 1) {
+          res.status(200).json({ message: "Gallery deleted successfully" });
+        } else {
+          res.status(404).json({ message: "Gallery not found" });
+        }
+      } catch (error) {
+        res.status(500).json({ message: "Error deleting gallery", error });
+      }
+    });
   } finally {
   }
 }
+
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
