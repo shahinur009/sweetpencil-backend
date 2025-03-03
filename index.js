@@ -30,6 +30,7 @@ async function run() {
     const galleryCollections = client
       .db("sweetPencilBD")
       .collection("galleries");
+    const videoCollections = client.db("sweetPencilBD").collection("videos");
     const orderCollections = client.db("sweetPencilBD").collection("orders");
 
     // get users from db
@@ -309,7 +310,7 @@ async function run() {
     app.post("/create-gallery", async (req, res) => {
       console.log("Request received at /create-gallery");
 
-      const { bannerImage: galleryImage } = req.body;
+      const { galleryImage } = req.body;
       if (!galleryImage) {
         return res.status(400).json({ message: "Image URL is required" });
       }
@@ -357,6 +358,60 @@ async function run() {
         }
       } catch (error) {
         res.status(500).json({ message: "Error deleting gallery", error });
+      }
+    });
+    // create video here
+    app.post("/create-video", async (req, res) => {
+      console.log("Request received at /create-video");
+
+      const { videos } = req.body;
+      if (!videos) {
+        return res.status(400).json({ message: "video URL is required" });
+      }
+
+      try {
+        const result = await videoCollections.insertOne({
+          videos,
+        });
+        res.json({
+          message: "video data saved successfully!",
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        console.error("Error saving data to MongoDB", error);
+        res.status(500).json({ message: "Failed to save videos data" });
+      }
+    });
+
+    // GET all video
+    app.get("/videos", async (req, res) => {
+      try {
+        const video = await videoCollections.find().toArray();
+        res.json(video);
+        // console.log("video", video);
+      } catch (error) {
+        console.error("Error fetching video:", error);
+        res.status(500).json({ message: "Failed to fetch video" });
+      }
+    });
+
+    //   video Deleted API's
+    app.delete("/video-delete/:id", async (req, res) => {
+      const { id } = req.params;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid video ID" });
+      }
+      try {
+        const result = await videoCollections.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount === 1) {
+          res.status(200).json({ message: "video deleted successfully" });
+        } else {
+          res.status(404).json({ message: "video not found" });
+        }
+      } catch (error) {
+        res.status(500).json({ message: "Error deleting video ", error });
       }
     });
   } finally {
