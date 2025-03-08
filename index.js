@@ -4,7 +4,13 @@ const app = express();
 require("dotenv").config();
 
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: ["https://sweetpencilbd.online", "http://localhost:5000"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 5000;
@@ -47,33 +53,48 @@ async function run() {
 
     // add Product API
     app.post("/add-product", async (req, res) => {
-      const product = req.body;
-      const result = await productCollections.insertOne(product);
-      res.send(result);
+      try {
+        const product = req.body;
+        const result = await productCollections.insertOne(product);
+        res.send(result);
+      } catch (error) {
+        console.error("Error adding product:", error);
+        res.status(500).send({ message: "Error adding product", error });
+      }
     });
 
     //Get card Data form Database
     app.get("/show-product", async (req, res) => {
-      const result = await productCollections.find().toArray();
-      res.send(result);
+      try {
+        const result = await productCollections.find().toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching products:", error);
+        res.status(500).json({ message: "Failed to fetch products", error });
+      }
     });
 
     // dashboard stock show
     app.get("/stock", async (req, res) => {
-      const { category, page, limit } = req.query;
-      const query = category ? { category } : {};
-      const pageNumber = parseInt(page) || 1;
-      const limitNumber = parseInt(limit) || 3;
-      const skip = (pageNumber - 1) * limitNumber;
+      try {
+        const { category, page, limit } = req.query;
+        const query = category ? { category } : {};
+        const pageNumber = parseInt(page) || 1;
+        const limitNumber = parseInt(limit) || 3;
+        const skip = (pageNumber - 1) * limitNumber;
 
-      const totalCount = await productCollections.countDocuments(query);
-      const products = await productCollections
-        .find(query)
-        .skip(skip)
-        .limit(limitNumber)
-        .toArray();
+        const totalCount = await productCollections.countDocuments(query);
+        const products = await productCollections
+          .find(query)
+          .skip(skip)
+          .limit(limitNumber)
+          .toArray();
 
-      res.send({ products, totalCount });
+        res.send({ products, totalCount });
+      } catch (error) {
+        console.error("Error fetching stock:", error);
+        res.status(500).json({ message: "Failed to fetch stock data", error });
+      }
     });
 
     //for details page
