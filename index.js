@@ -6,7 +6,7 @@ require("dotenv").config();
 app.use(express.json());
 app.use(
   cors({
-    origin: ["https://sweetpencilbd.online", "http://localhost:5000"],
+    origin: ["https://sweetpencilbdonline.vercel.app", "http://localhost:5173"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
