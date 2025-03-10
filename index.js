@@ -328,16 +328,14 @@ async function run() {
 
     // create gallery here
     app.post("/create-gallery", async (req, res) => {
-      console.log("Request received at /create-gallery");
-
-      const { galleryImage } = req.body;
-      if (!galleryImage) {
+      const { bannerImage } = req.body;
+      if (!bannerImage) {
         return res.status(400).json({ message: "Image URL is required" });
       }
 
       try {
         const result = await galleryCollections.insertOne({
-          galleryImage,
+          image: bannerImage,
         });
         res.json({
           message: "gallery data saved successfully!",
